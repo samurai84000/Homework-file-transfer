@@ -4,48 +4,52 @@ module final_comparator #(
 )(
     input  logic                   clk,
     input  logic                   reset,
-    input  logic                   subtracted_frame_data, // Motion mask (1=motion)
+    input  logic                   subtracted_frame_data, // Motion mask
     input  logic [DATA_INPUT-1:0]  orig_frame_data,       // Original RGB pixel
-    input  logic                   ready,                 // Both input FIFOs have data
+    input  logic                   ready,                 // FIFOs status signal
     output logic [DATA_OUTPUT-1:0] output_data,
     output logic                   valid_data
 );
 
     typedef enum logic [0:0] {IDLE, RUNNING} state_t;
-    state_t state;
+    state_t curr_state, next_state;
 
+    // --- Process 1: Sequential Logic (State Register) ---
     always_ff @(posedge clk or posedge reset) begin
         if (reset) begin
-            state       <= IDLE;
-            output_data <= '0;
-            valid_data  <= 1'b0;
+            curr_state <= IDLE;
         end else begin
-            // Default: valid is low unless we process data this cycle
-            valid_data <= 1'b0;
-
-            case (state)
-                IDLE: begin
-                    if (ready) begin
-                        // Core Logic: 
-                        // If motion detected (1), output RED. 
-                        // Otherwise, output original pixel color.
-                        output_data <= (subtracted_frame_data) ? 24'hFF0000 : orig_frame_data;
-                        
-                        valid_data  <= 1'b1; // MUST set this to 1 to write to next FIFO
-                        state       <= RUNNING;
-                    end
-                end
-
-                RUNNING: begin
-                    if (ready) begin
-                        output_data <= (subtracted_frame_data) ? 24'hFF0000 : orig_frame_data;
-                        valid_data  <= 1'b1;
-                        // Stay in RUNNING as long as data is ready
-                    end else begin
-                        state <= IDLE;
-                    end
-                end
-            endcase
+            curr_state <= next_state;
         end
     end
+
+    // --- Process 2: Combinational Logic (Next State & Outputs) ---
+    always_comb begin
+        // Default assignments to prevent latches and ensure clean logic
+        next_state = curr_state;
+        valid_data = 1'b0;
+        output_data = '0;
+
+        case (curr_state)
+            IDLE: begin
+                if (ready) begin
+                    // Core logic: Select Red if motion, otherwise original pixel
+                    output_data = (subtracted_frame_data) ? 24'hFF0000 : orig_frame_data;
+                    valid_data  = 1'b1;
+                    next_state  = RUNNING;
+                end
+            end
+
+            RUNNING: begin
+                if (ready) begin
+                    output_data = (subtracted_frame_data) ? 24'hFF0000 : orig_frame_data;
+                    valid_data  = 1'b1;
+                    next_state  = RUNNING; // Stay in RUNNING while ready
+                end else begin
+                    next_state  = IDLE;    // Return to IDLE if data stream pauses
+                end
+            end
+        endcase
+    end
+
 endmodule
