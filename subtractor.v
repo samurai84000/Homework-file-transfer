@@ -11,51 +11,60 @@ module subtractor #(
 );
 
     typedef enum logic [0:0] {IDLE, RUNNING} state_t;
-    state_t state;
+    state_t curr_state, next_state;
 
-    // We use a temporary logic variable for the math result
+    // Internal variable for calculation
     logic [DATA_INPUT-1:0] diff_result;
 
+    // --- Process 1: Sequential Logic (State Register) ---
     always_ff @(posedge clk or posedge reset) begin
         if (reset) begin
-            state            <= IDLE;
-            frame_difference <= 1'b0;
-            valid_data       <= 1'b0;
+            curr_state <= IDLE;
         end else begin
-            // Default: valid is low unless we process data
-            valid_data <= 1'b0;
-
-            case (state)
-                IDLE: begin
-                    if (ready) begin
-                        // Do math
-                        if (old_frame_data >= new_frame_data)
-                            diff_result = old_frame_data - new_frame_data;
-                        else
-                            diff_result = new_frame_data - old_frame_data;
-
-                        // Set outputs
-                        frame_difference <= (diff_result >= 50) ? 1'b1 : 1'b0;
-                        valid_data       <= 1'b1;
-                        state            <= RUNNING;
-                    end
-                end
-
-                RUNNING: begin
-                    if (ready) begin
-                        if (old_frame_data >= new_frame_data)
-                            diff_result = old_frame_data - new_frame_data;
-                        else
-                            diff_result = new_frame_data - old_frame_data;
-
-                        frame_difference <= (diff_result >= 50) ? 1'b1 : 1'b0;
-                        valid_data       <= 1'b1;
-                        // Stay in RUNNING
-                    end else begin
-                        state <= IDLE;
-                    end
-                end
-            endcase
+            curr_state <= next_state;
         end
     end
+
+    // --- Process 2: Combinational Logic (Next State & Outputs) ---
+    always_comb begin
+        // Default assignments to prevent latches
+        next_state = curr_state;
+        valid_data = 1'b0;
+        frame_difference = 1'b0;
+        diff_result = '0;
+
+        case (curr_state)
+            IDLE: begin
+                if (ready) begin
+                    // Calculate absolute difference [cite: 8, 9]
+                    if (old_frame_data >= new_frame_data)
+                        diff_result = old_frame_data - new_frame_data;
+                    else
+                        diff_result = new_frame_data - old_frame_data;
+
+                    // Apply Threshold (50) to detect motion 
+                    frame_difference = (diff_result >= 50) ? 1'b1 : 1'b0;
+                    valid_data = 1'b1;
+                    next_state = RUNNING;
+                end
+            end
+
+            RUNNING: begin
+                if (ready) begin
+                    // Continue processing while ready [cite: 132]
+                    if (old_frame_data >= new_frame_data)
+                        diff_result = old_frame_data - new_frame_data;
+                    else
+                        diff_result = new_frame_data - old_frame_data;
+
+                    frame_difference = (diff_result >= 50) ? 1'b1 : 1'b0;
+                    valid_data = 1'b1;
+                    next_state = RUNNING; 
+                end else begin
+                    next_state = IDLE;
+                end
+            end
+        endcase
+    end
+
 endmodule
