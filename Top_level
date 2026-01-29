@@ -1,118 +1,113 @@
-module top_level (
+module motion_detect_top (
     input  logic        clk,
     input  logic        reset,
 
-    // Interface to External Frame Source (e.g. Testbench)
-    input  logic [23:0] frame_in_dout,
-    input  logic        frame_in_empty,
-    output logic        frame_in_rd_en,
+    // External Inputs (Current Frame)
+    input  logic [23:0] frame_in_data,
+    input  logic        frame_in_valid,
+    output logic        frame_in_ready,
 
-    // Interface to External Background Source
-    input  logic [23:0] back_in_dout,
-    input  logic        back_in_empty,
-    output logic        back_in_rd_en,
+    // External Inputs (Background/Base Image)
+    input  logic [23:0] back_in_data,
+    input  logic        back_in_valid,
+    output logic        back_in_ready,
 
-    // Interface to External Sink (Output Image)
-    output logic [23:0] final_out_din,
-    output logic        final_out_wr_en,
-    input  logic        final_out_full
+    // External Output
+    output logic [23:0] final_out_data,
+    output logic        final_out_valid,
+    input  logic        final_out_ready
 );
 
-    // --- 1. Internal Signal Declarations ---
+    // --- Internal Wiring ---
     
     // Grayscale Outputs
     logic [7:0] gs_frame_out, gs_back_out;
-    logic       gs_frame_vld, gs_back_vld;
-    logic       gs_frame_fifo_full, gs_back_fifo_full;
-
-    // Subtractor Inputs (from Grayscale FIFOs)
-    logic [7:0] gs_frame_fifo_dout, gs_back_fifo_dout;
-    logic       gs_frame_fifo_empty, gs_back_fifo_empty;
+    logic       gs_frame_wr, gs_back_wr;
+    
+    // Grayscale-to-Subtractor FIFO Signals
+    logic [7:0] fifo_gs_frame_dout, fifo_gs_back_dout;
+    logic       fifo_gs_frame_empty, fifo_gs_back_empty;
     logic       sub_rd_en;
-    logic       sub_ready;
 
     // Subtractor Outputs
-    logic       sub_mask_out, sub_vld_out;
-    logic       mask_fifo_full;
+    logic       sub_mask, sub_valid;
+    
+    // Mask-to-Highlight FIFO Signals
+    logic       mask_fifo_dout, mask_fifo_empty, mask_fifo_full;
+    
+    // Bypass FIFO Signals (Frame RGB)
+    logic [23:0] bypass_dout;
+    logic        bypass_empty, bypass_full;
 
-    // Highlighter Inputs (from Mask and Bypass FIFOs)
-    logic       mask_fifo_dout, mask_fifo_empty;
-    logic [23:0] bypass_fifo_dout;
-    logic        bypass_fifo_empty;
-    logic        highlighter_ready;
-    logic        bypass_fifo_full;
+    // --- 1. Grayscale Processing Paths ---
 
-    // --- 2. Grayscale Stage ---
-
+    // Current Frame Grayscale
     grayscale frame_gs_inst (
         .clock(clk), .reset(reset),
-        .in_dout(frame_in_dout), .in_empty(frame_in_empty), .in_rd_en(frame_in_rd_en),
-        .out_din(gs_frame_out), .out_wr_en(gs_frame_vld), .out_full(gs_frame_fifo_full)
+        .in_dout(frame_in_data), .in_empty(!frame_in_valid), .in_rd_en(frame_in_ready),
+        .out_din(gs_frame_out), .out_wr_en(gs_frame_wr), .out_full(1'b0) // Connected to FIFO
     );
 
+    // Background Grayscale
     grayscale back_gs_inst (
         .clock(clk), .reset(reset),
-        .in_dout(back_in_dout), .in_empty(back_in_empty), .in_rd_en(back_in_rd_en),
-        .out_din(gs_back_out), .out_wr_en(gs_back_vld), .out_full(gs_back_fifo_full)
+        .in_dout(back_in_data), .in_empty(!back_in_valid), .in_rd_en(back_in_ready),
+        .out_din(gs_back_out), .out_wr_en(gs_back_wr), .out_full(1'b0)
     );
 
-    // --- 3. Intermediate FIFOs (Grayscale & Bypass) ---
+    // --- 2. Intermediate FIFOs ---
 
-    // Frame Grayscale FIFO
-    fifo #(.DATA_WIDTH(8), .BUFFER_SIZE(32)) fifo_gs_frame (
+    fifo #(.FIFO_DATA_WIDTH(8), .FIFO_BUFFER_SIZE(32)) fifo_gs_frame (
         .reset(reset), .wr_clk(clk), .rd_clk(clk),
-        .din(gs_frame_out), .wr_en(gs_frame_vld), .full(gs_frame_fifo_full),
-        .dout(gs_frame_fifo_dout), .empty(gs_frame_fifo_empty), .rd_en(sub_rd_en)
+        .din(gs_frame_out), .wr_en(gs_frame_wr), 
+        .dout(fifo_gs_frame_dout), .empty(fifo_gs_frame_empty), .rd_en(sub_rd_en)
     );
 
-    // Background Grayscale FIFO
-    fifo #(.DATA_WIDTH(8), .BUFFER_SIZE(32)) fifo_gs_back (
+    fifo #(.FIFO_DATA_WIDTH(8), .FIFO_BUFFER_SIZE(32)) fifo_gs_back (
         .reset(reset), .wr_clk(clk), .rd_clk(clk),
-        .din(gs_back_out), .wr_en(gs_back_vld), .full(gs_back_fifo_full),
-        .dout(gs_back_fifo_dout), .empty(gs_back_fifo_empty), .rd_en(sub_rd_en)
+        .din(gs_back_out), .wr_en(gs_back_wr),
+        .dout(fifo_gs_back_dout), .empty(fifo_gs_back_empty), .rd_en(sub_rd_en)
     );
 
-    // Bypass FIFO (Delays original RGB to match processing latency)
-    fifo #(.DATA_WIDTH(24), .BUFFER_SIZE(64)) fifo_bypass (
+    // Bypass FIFO: Delays original RGB frame to match processing latency
+    fifo #(.FIFO_DATA_WIDTH(24), .FIFO_BUFFER_SIZE(64)) fifo_bypass (
         .reset(reset), .wr_clk(clk), .rd_clk(clk),
-        .din(frame_in_dout), .wr_en(frame_in_rd_en), .full(bypass_fifo_full),
-        .dout(bypass_fifo_dout), .empty(bypass_fifo_empty), .rd_en(highlighter_ready)
+        .din(frame_in_data), .wr_en(frame_in_ready), .full(bypass_full),
+        .dout(bypass_dout), .empty(bypass_empty), .rd_en(highlighter_ready)
     );
 
-    // --- 4. Subtractor Stage ---
+    // --- 3. Subtractor Stage ---
 
-    // Ready when both grayscale pixels are available and there is room for the result
-    assign sub_ready = !gs_frame_fifo_empty && !gs_back_fifo_empty && !mask_fifo_full;
+    assign sub_ready = !fifo_gs_frame_empty && !fifo_gs_back_empty && !mask_fifo_full; [cite: 311]
     assign sub_rd_en = sub_ready;
 
     subtractor sub_inst (
         .clk(clk), .reset(reset),
-        .new_frame_data(gs_frame_fifo_dout),
-        .old_frame_data(gs_back_fifo_dout),
-        .ready(sub_ready),
-        .frame_difference(sub_mask_out),
-        .valid_data(sub_vld_out)
+        .new_frame_data(fifo_gs_frame_dout), [cite: 310]
+        .old_frame_data(fifo_gs_back_dout), [cite: 310]
+        .ready(sub_ready), [cite: 311]
+        .frame_difference(sub_mask), [cite: 320]
+        .valid_data(sub_valid) [cite: 311]
     );
 
-    // Mask FIFO (Holds the 1-bit motion result)
-    fifo #(.DATA_WIDTH(1), .BUFFER_SIZE(32)) fifo_mask (
+    // Mask FIFO
+    fifo #(.FIFO_DATA_WIDTH(1), .FIFO_BUFFER_SIZE(32)) fifo_mask (
         .reset(reset), .wr_clk(clk), .rd_clk(clk),
-        .din(sub_mask_out), .wr_en(sub_vld_out), .full(mask_fifo_full),
+        .din(sub_mask), .wr_en(sub_valid), .full(mask_fifo_full),
         .dout(mask_fifo_dout), .empty(mask_fifo_empty), .rd_en(highlighter_ready)
     );
 
-    // --- 5. Highlight (Final Comparator) Stage ---
+    // --- 4. Highlight Stage ---
 
-    // Ready when we have the motion mask, the original pixel, and output space
-    assign highlighter_ready = !mask_fifo_empty && !bypass_fifo_empty && !final_out_full;
+    assign highlighter_ready = !mask_fifo_empty && !bypass_empty && final_out_ready; [cite: 272]
 
     final_comparator highlight_inst (
         .clk(clk), .reset(reset),
-        .subtracted_frame_data(mask_fifo_dout),
-        .orig_frame_data(bypass_fifo_dout),
-        .ready(highlighter_ready),
-        .output_data(final_out_din),
-        .valid_data(final_out_wr_en)
+        .subtracted_frame_data(mask_fifo_dout), [cite: 271]
+        .orig_frame_data(bypass_dout), [cite: 272]
+        .ready(highlighter_ready), [cite: 272]
+        .output_data(final_out_data), [cite: 272]
+        .valid_data(final_out_valid) [cite: 272]
     );
 
 endmodule
