@@ -15,10 +15,12 @@ module motion_detect_top (
     // External Output
     output logic [23:0] final_out_data,
     output logic        final_out_valid,
-    input  logic        final_out_ready
+    input  logic        final_out_ready  // Fixed: Removed trailing comma
 );
 
     // --- Internal Wiring ---
+    logic sub_ready;
+    logic highlighter_ready; // Fixed: Added missing declaration
     
     // Grayscale Outputs
     logic [7:0] gs_frame_out, gs_back_out;
@@ -41,14 +43,12 @@ module motion_detect_top (
 
     // --- 1. Grayscale Processing Paths ---
 
-    // Current Frame Grayscale
     grayscale frame_gs_inst (
         .clock(clk), .reset(reset),
         .in_dout(frame_in_data), .in_empty(!frame_in_valid), .in_rd_en(frame_in_ready),
-        .out_din(gs_frame_out), .out_wr_en(gs_frame_wr), .out_full(1'b0) // Connected to FIFO
+        .out_din(gs_frame_out), .out_wr_en(gs_frame_wr), .out_full(1'b0) 
     );
 
-    // Background Grayscale
     grayscale back_gs_inst (
         .clock(clk), .reset(reset),
         .in_dout(back_in_data), .in_empty(!back_in_valid), .in_rd_en(back_in_ready),
@@ -69,7 +69,6 @@ module motion_detect_top (
         .dout(fifo_gs_back_dout), .empty(fifo_gs_back_empty), .rd_en(sub_rd_en)
     );
 
-    // Bypass FIFO: Delays original RGB frame to match processing latency
     fifo #(.FIFO_DATA_WIDTH(24), .FIFO_BUFFER_SIZE(64)) fifo_bypass (
         .reset(reset), .wr_clk(clk), .rd_clk(clk),
         .din(frame_in_data), .wr_en(frame_in_ready), .full(bypass_full),
@@ -78,19 +77,18 @@ module motion_detect_top (
 
     // --- 3. Subtractor Stage ---
 
-    assign sub_ready = !fifo_gs_frame_empty && !fifo_gs_back_empty && !mask_fifo_full; [cite: 311]
+    assign sub_ready = !fifo_gs_frame_empty && !fifo_gs_back_empty && !mask_fifo_full;
     assign sub_rd_en = sub_ready;
 
     subtractor sub_inst (
         .clk(clk), .reset(reset),
-        .new_frame_data(fifo_gs_frame_dout), [cite: 310]
-        .old_frame_data(fifo_gs_back_dout), [cite: 310]
-        .ready(sub_ready), [cite: 311]
-        .frame_difference(sub_mask), [cite: 320]
-        .valid_data(sub_valid) [cite: 311]
+        .new_frame_data(fifo_gs_frame_dout),
+        .old_frame_data(fifo_gs_back_dout),
+        .ready(sub_ready),
+        .frame_difference(sub_mask),
+        .valid_data(sub_valid)
     );
 
-    // Mask FIFO
     fifo #(.FIFO_DATA_WIDTH(1), .FIFO_BUFFER_SIZE(32)) fifo_mask (
         .reset(reset), .wr_clk(clk), .rd_clk(clk),
         .din(sub_mask), .wr_en(sub_valid), .full(mask_fifo_full),
@@ -99,15 +97,15 @@ module motion_detect_top (
 
     // --- 4. Highlight Stage ---
 
-    assign highlighter_ready = !mask_fifo_empty && !bypass_empty && final_out_ready; [cite: 272]
+    assign highlighter_ready = !mask_fifo_empty && !bypass_empty && final_out_ready;
 
     final_comparator highlight_inst (
         .clk(clk), .reset(reset),
-        .subtracted_frame_data(mask_fifo_dout), [cite: 271]
-        .orig_frame_data(bypass_dout), [cite: 272]
-        .ready(highlighter_ready), [cite: 272]
-        .output_data(final_out_data), [cite: 272]
-        .valid_data(final_out_valid) [cite: 272]
+        .subtracted_frame_data(mask_fifo_dout),
+        .orig_frame_data(bypass_dout),
+        .ready(highlighter_ready),
+        .output_data(final_out_data),
+        .valid_data(final_out_valid)
     );
 
 endmodule
