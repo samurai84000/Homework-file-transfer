@@ -1,0 +1,86 @@
+module motion_detect_top (
+    input  logic        clk,
+    input  logic        reset,
+    // External Inputs (from Testbench)
+    input  logic [23:0] frame_in_dout,
+    input  logic        frame_in_empty,
+    output logic        frame_in_rd_en,
+    
+    input  logic [23:0] back_in_dout,
+    input  logic        back_in_empty,
+    output logic        back_in_rd_en,
+
+    // External Output
+    output logic [23:0] final_out_din,
+    output logic        final_out_wr_en,
+    input  logic        final_out_full
+);
+
+    // --- INTERNAL SIGNALS ---
+    // Grayscale Outputs
+    logic [7:0] gs_frame_out, gs_back_out;
+    logic       gs_frame_vld, gs_back_vld;
+    
+    // FIFO Outputs to Subtractor
+    logic [7:0] gs_frame_fifo_dout, gs_back_fifo_dout;
+    logic       gs_frame_fifo_empty, gs_back_fifo_empty;
+    logic       sub_rd_en;
+
+    // Subtractor Outputs
+    logic       motion_mask, mask_vld;
+    
+    // Bypass Path Signals
+    logic [23:0] bypass_dout;
+    logic        bypass_empty;
+    logic        highlighter_ready;
+
+    // --- 1. GRAYSCALE STAGE ---
+    grayscale frame_gs (
+        .clock(clk), .reset(reset),
+        .in_dout(frame_in_dout), .in_empty(frame_in_empty), .in_rd_en(frame_in_rd_en),
+        .out_din(gs_frame_out), .out_wr_en(gs_frame_vld), .out_full(gs_frame_fifo_full)
+    );
+
+    // --- 2. INTERMEDIATE FIFOS ---
+    // One for the Frame Grayscale
+    fifo #(.FIFO_DATA_WIDTH(8)) fifo_gs_frame (
+        .reset(reset), .wr_clk(clk), .rd_clk(clk),
+        .din(gs_frame_out), .wr_en(gs_frame_vld),
+        .dout(gs_frame_fifo_dout), .empty(gs_frame_fifo_empty), .rd_en(sub_rd_en)
+    );
+
+    // One for the Original RGB Bypass (Important for synchronization!)
+    fifo #(.FIFO_DATA_WIDTH(24)) fifo_bypass (
+        .reset(reset), .wr_clk(clk), .rd_clk(clk),
+        .din(frame_in_dout), .wr_en(frame_in_rd_en), // Capture original pixel
+        .dout(bypass_dout), .empty(bypass_empty), .rd_en(highlighter_ready)
+    );
+
+    // --- 3. SUBTRACTOR STAGE ---
+    // Logic for 'ready': Subtractor needs both grayscale pixels
+    assign sub_ready = !gs_frame_fifo_empty && !gs_back_fifo_empty;
+    assign sub_rd_en = sub_ready; // Read from FIFOs when subtractor is ready
+
+    subtractor sub_inst (
+        .clk(clk), .reset(reset),
+        .new_frame_data(gs_frame_fifo_dout),
+        .old_frame_data(gs_back_fifo_dout),
+        .ready(sub_ready),
+        .frame_difference(motion_mask),
+        .valid_data(mask_vld)
+    );
+
+    // --- 4. HIGHLIGHT STAGE ---
+    // Logic for 'ready': Needs both the motion mask AND the original bypassed pixel
+    assign highlighter_ready = !mask_fifo_empty && !bypass_empty && !final_out_full;
+
+    final_comparator highlight_inst (
+        .clk(clk), .reset(reset),
+        .subtracted_frame_data(motion_mask_from_fifo),
+        .orig_frame_data(bypass_dout),
+        .ready(highlighter_ready),
+        .output_data(final_out_din),
+        .valid_data(final_out_wr_en)
+    );
+
+endmodule
