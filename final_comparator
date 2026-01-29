@@ -1,0 +1,51 @@
+module final_comparator #(
+    parameter DATA_INPUT = 24,
+    parameter DATA_OUTPUT = 24
+)(
+    input  logic                   clk,
+    input  logic                   reset,
+    input  logic                   subtracted_frame_data, // Motion mask (1=motion)
+    input  logic [DATA_INPUT-1:0]  orig_frame_data,       // Original RGB pixel
+    input  logic                   ready,                 // Both input FIFOs have data
+    output logic [DATA_OUTPUT-1:0] output_data,
+    output logic                   valid_data
+);
+
+    typedef enum logic [0:0] {IDLE, RUNNING} state_t;
+    state_t state;
+
+    always_ff @(posedge clk or posedge reset) begin
+        if (reset) begin
+            state       <= IDLE;
+            output_data <= '0;
+            valid_data  <= 1'b0;
+        end else begin
+            // Default: valid is low unless we process data this cycle
+            valid_data <= 1'b0;
+
+            case (state)
+                IDLE: begin
+                    if (ready) begin
+                        // Core Logic: 
+                        // If motion detected (1), output RED. 
+                        // Otherwise, output original pixel color.
+                        output_data <= (subtracted_frame_data) ? 24'hFF0000 : orig_frame_data;
+                        
+                        valid_data  <= 1'b1; // MUST set this to 1 to write to next FIFO
+                        state       <= RUNNING;
+                    end
+                end
+
+                RUNNING: begin
+                    if (ready) begin
+                        output_data <= (subtracted_frame_data) ? 24'hFF0000 : orig_frame_data;
+                        valid_data  <= 1'b1;
+                        // Stay in RUNNING as long as data is ready
+                    end else begin
+                        state <= IDLE;
+                    end
+                end
+            endcase
+        end
+    end
+endmodule
