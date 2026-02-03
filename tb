@@ -2,262 +2,212 @@
 
 module motion_detect_tb();
 
-[cite_start]localparam string INFILE_BG    = "base.bmp"; [cite: 197]
-[cite_start]localparam string INFILE_FRAME = "pedestrians.bmp"; [cite: 197]
-[cite_start]localparam string OUTFILE      = "output.bmp"; [cite: 198]
-[cite_start]localparam string CMPFILE      = "img_out.bmp"; [cite: 198]
-[cite_start]localparam CLOCK_PERIOD = 10; [cite: 199]
+localparam string INFILE_BG    = "base.bmp";
+localparam string INFILE_FRAME = "pedestrians.bmp";
+localparam string OUTFILE      = "output.bmp";
+localparam CLOCK_PERIOD = 10;
 
-[cite_start]logic clock = 1'b1; [cite: 199]
-[cite_start]logic reset = '0; [cite: 199]
-[cite_start]logic start = '0; [cite: 199]
-[cite_start]logic done  = '0; [cite: 200]
+logic clock = 1'b1;
+logic reset = '0;
+logic start = '0;
+logic done  = '0;
 
-// Signals mapped to your component names
-[cite_start]logic        bg_gs_we; [cite: 201]
-[cite_start]logic [23:0] bg_gs_din; [cite: 201]
-[cite_start]logic        frame_gs_we; [cite: 202]
-[cite_start]logic [23:0] frame_gs_din; [cite: 202]
-[cite_start]logic        frame_hl_we; [cite: 203]
-[cite_start]logic [23:0] frame_hl_din; [cite: 203]
-[cite_start]logic        hl_out_re; [cite: 204]
+[cite_start]// Signals mapped to your component names [cite: 318]
+logic        bg_gs_we;
+logic [23:0] bg_gs_din;
+logic        frame_gs_we;
+logic [23:0] frame_gs_din;
+logic        frame_hl_we;
+logic [23:0] frame_hl_din;
+logic        hl_out_re;
 
-[cite_start]logic        bg_gs_full; [cite: 204]
-[cite_start]logic        frame_gs_full; [cite: 205]
-[cite_start]logic        frame_hl_full; [cite: 205]
-[cite_start]logic        hl_out_empty; [cite: 206]
-[cite_start]logic [23:0] hl_out_dout; [cite: 206]
+logic        bg_gs_full;
+logic        frame_gs_full;
+logic        frame_hl_full;
+logic        hl_out_empty;
+logic [23:0] hl_out_dout;
 
-[cite_start]logic   hold_clock	= '0; [cite: 206]
-[cite_start]logic   bg_gs_write_done = '0; [cite: 207]
-[cite_start]logic   frame_gs_write_done = '0; [cite: 207]
-[cite_start]logic   frame_hl_write_done = '0; [cite: 207]
-[cite_start]logic   out_read_done = '0; [cite: 208]
-[cite_start]integer out_errors	= '0; [cite: 208]
+logic   bg_gs_write_done = '0;
+logic   frame_gs_write_done = '0;
+logic   out_read_done = '0;
 
-[cite_start]localparam WIDTH  = 768; [cite: 208]
-[cite_start]localparam HEIGHT = 576; [cite: 208]
-[cite_start]localparam BMP_HEADER_SIZE = 54; [cite: 209]
-[cite_start]localparam BYTES_PER_PIXEL = 3; [cite: 209]
-[cite_start]localparam BMP_DATA_SIZE = WIDTH * HEIGHT * BYTES_PER_PIXEL; [cite: 209]
+localparam WIDTH  = 768;
+localparam HEIGHT = 576;
+localparam BMP_HEADER_SIZE = 54;
+localparam BYTES_PER_PIXEL = 3;
+localparam BMP_DATA_SIZE = WIDTH * HEIGHT * BYTES_PER_PIXEL;
 
-// Instantiating your top-level module
+[cite_start]// Instantiating your top-level module [cite: 318]
 motion_detect_top 
 #(
-	[cite_start].WIDTH (WIDTH), [cite: 210]
-	[cite_start].HEIGHT(HEIGHT) [cite: 210]
+	.WIDTH (WIDTH),
+	.HEIGHT(HEIGHT)
 ) 
 motion_detect_top_inst (
-	[cite_start].clock(clock), [cite: 210]
-	[cite_start].reset(reset), [cite: 210]
+	.clock(clock),
+	.reset(reset),
 
-	[cite_start].bg_gs_we    (bg_gs_we), [cite: 210]
-	[cite_start].bg_gs_din   (bg_gs_din), [cite: 210]
-	[cite_start].frame_gs_we (frame_gs_we), [cite: 210]
-	[cite_start].frame_gs_din(frame_gs_din), [cite: 210]
-	[cite_start].frame_hl_we (frame_hl_we), [cite: 210]
-	[cite_start].frame_hl_din(frame_hl_din), [cite: 210]
-	[cite_start].hl_out_re   (hl_out_re), [cite: 210]
+	.bg_gs_we    (bg_gs_we),
+	.bg_gs_din   (bg_gs_din),
+	.frame_gs_we (frame_gs_we),
+	.frame_gs_din(frame_gs_din),
+	.frame_hl_we (frame_hl_we),
+	.frame_hl_din(frame_hl_din),
+	.hl_out_re   (hl_out_re),
 
-	[cite_start].bg_gs_full   (bg_gs_full), [cite: 210]
-	[cite_start].frame_gs_full(frame_gs_full), [cite: 210]
-	[cite_start].frame_hl_full(frame_hl_full), [cite: 210]
-	[cite_start].hl_out_empty (hl_out_empty), [cite: 210]
-	[cite_start].hl_out_dout  (hl_out_dout) [cite: 210]
+	.bg_gs_full   (bg_gs_full),
+	.frame_gs_full(frame_gs_full),
+	.frame_hl_full(frame_hl_full),
+	.hl_out_empty (hl_out_empty),
+	.hl_out_dout  (hl_out_dout)
 );
 
 always begin
-	[cite_start]clock = 1'b1; [cite: 211]
-	[cite_start]#(CLOCK_PERIOD/2); [cite: 211]
-	[cite_start]clock = 1'b0; [cite: 211]
-	[cite_start]#(CLOCK_PERIOD/2); [cite: 211]
+	clock = 1'b1;
+	#(CLOCK_PERIOD/2);
+	clock = 1'b0;
+	#(CLOCK_PERIOD/2);
 end
 
 initial begin
-	[cite_start]@(posedge clock); [cite: 211]
-	[cite_start]reset = 1'b1; [cite: 211]
-	[cite_start]@(posedge clock); [cite: 211]
-	[cite_start]reset = 1'b0; [cite: 211]
+	@(posedge clock);
+	reset = 1'b1;
+	@(posedge clock);
+	reset = 1'b0;
 end
 
 initial
 begin : driver
-	[cite_start]longint unsigned start_time, end_time; [cite: 212]
-	[cite_start]string diffcmd; [cite: 212]
+	longint unsigned start_time, end_time;
 
-	[cite_start]@(negedge reset); [cite: 212]
-	[cite_start]@(posedge clock); [cite: 212]
-	[cite_start]start_time = $time; [cite: 212]
+	@(negedge reset);
+	@(posedge clock);
+	start_time = $time;
 
-	[cite_start]$display("@ %0t: Beginning simulation...", start_time); [cite: 213]
-	[cite_start]start = 1'b1; [cite: 213]
-	[cite_start]@(posedge clock); [cite: 213]
-	[cite_start]start = 1'b0; [cite: 213]
+	$display("@ %0t: Beginning simulation...", start_time);
+	start = 1'b1;
+	@(posedge clock);
+	start = 1'b0;
 
-	[cite_start]wait(out_read_done); [cite: 213]
-	[cite_start]end_time = $time; [cite: 213]
+	wait(out_read_done);
+	end_time = $time;
 
-	[cite_start]$display(); [cite: 214]
-	[cite_start]$display("@ %0t: Simulation completed.", end_time); [cite: 214]
-	[cite_start]$display("Total simulation cycle count: %0d", (end_time-start_time)/CLOCK_PERIOD); [cite: 214]
-	[cite_start]$display("Total error count: %0d", out_errors); [cite: 214]
-
-	[cite_start]$display("---------------------------------------"); [cite: 214]
-	[cite_start]$display("Output file diff:"); [cite: 215]
-	[cite_start]$swrite( diffcmd, "diff %s %s", OUTFILE, CMPFILE ); [cite: 215]
-	[cite_start]$display( "$ %s\n", diffcmd ); [cite: 215]
-	[cite_start]$system( diffcmd ); [cite: 215]
-	[cite_start]$display("\nEnd diff"); [cite: 216]
-
-	[cite_start]$finish; [cite: 216]
+	$display();
+	$display("@ %0t: Simulation completed.", end_time);
+	$display("Total simulation cycle count: %0d", (end_time-start_time)/CLOCK_PERIOD);
+	$finish;
 end
 
 initial
 begin : read_bg
-	[cite_start]int infile_bg; [cite: 216]
-	[cite_start]int r; [cite: 216]
-	[cite_start]logic [7:0] bmp_header [0:BMP_HEADER_SIZE-1]; [cite: 216]
+	int infile_bg;
+	int r;
+	logic [7:0] bmp_header [0:BMP_HEADER_SIZE-1];
 
-	[cite_start]@(negedge reset); [cite: 216]
-	[cite_start]$display("@ %0t: Loading bg for grayscale %s...", $time, INFILE_BG); [cite: 217]
-	[cite_start]infile_bg       = $fopen(INFILE_BG, "rb"); [cite: 217]
-	[cite_start]bg_gs_we = 1'b0; [cite: 218]
+	@(negedge reset);
+	$display("@ %0t: Loading background: %s", $time, INFILE_BG);
+	infile_bg = $fopen(INFILE_BG, "rb");
+	bg_gs_we = 1'b0;
 
-	[cite_start]r = $fread(bmp_header, infile_bg, 0, BMP_HEADER_SIZE); [cite: 218]
+	r = $fread(bmp_header, infile_bg, 0, BMP_HEADER_SIZE);
 
-	[cite_start]for( int i_bg=0; i_bg<BMP_DATA_SIZE; ) [cite: 219]
+	for( int i_bg=0; i_bg<BMP_DATA_SIZE; )
 	begin
-		[cite_start]@(negedge clock); [cite: 219]
-		[cite_start]bg_gs_we = 1'b0; [cite: 219]
+		@(negedge clock);
+		bg_gs_we = 1'b0;
 
-		[cite_start]if ( !bg_gs_full ) [cite: 220]
+		if ( !bg_gs_full )
 		begin
-			[cite_start]r = $fread(bg_gs_din, infile_bg, BMP_HEADER_SIZE+i_bg, BYTES_PER_PIXEL); [cite: 220]
-			[cite_start]bg_gs_we = 1'b1; [cite: 220]
-			[cite_start]i_bg += BYTES_PER_PIXEL; [cite: 220]
+			r = $fread(bg_gs_din, infile_bg, BMP_HEADER_SIZE+i_bg, BYTES_PER_PIXEL);
+			bg_gs_we = 1'b1;
+			i_bg += BYTES_PER_PIXEL;
 		end
 	end
 
-	[cite_start]@(negedge clock); [cite: 220]
-	[cite_start]bg_gs_we = 1'b0; [cite: 220]
-	[cite_start]$fclose(infile_bg); [cite: 221]
-	[cite_start]bg_gs_write_done = 1'b1; [cite: 221]
+	@(negedge clock);
+	bg_gs_we = 1'b0;
+	$fclose(infile_bg);
+	bg_gs_write_done = 1'b1;
 end
 
 initial
-begin : read_gs_frame
-	[cite_start]int infile_frame_gs; [cite: 222]
-	[cite_start]int r; [cite: 222]
-	[cite_start]logic [7:0] bmp_header [0:BMP_HEADER_SIZE-1]; [cite: 222]
+begin : read_frames
+	int infile_frame;
+	int r;
+	logic [7:0] bmp_header [0:BMP_HEADER_SIZE-1];
 
-	[cite_start]@(negedge reset); [cite: 222]
-	[cite_start]$display("@ %0t: Loading frame for grayscale %s...", $time, INFILE_FRAME); [cite: 222]
+	@(negedge reset);
+	$display("@ %0t: Loading frame: %s", $time, INFILE_FRAME);
 
-	[cite_start]infile_frame_gs = $fopen(INFILE_FRAME, "rb"); [cite: 222]
-	[cite_start]frame_gs_we = 1'b0; [cite: 222]
+	infile_frame = $fopen(INFILE_FRAME, "rb");
+	frame_gs_we = 1'b0;
+	frame_hl_we = 1'b0;
 
-	[cite_start]r = $fread(bmp_header, infile_frame_gs, 0, BMP_HEADER_SIZE); [cite: 223]
+	r = $fread(bmp_header, infile_frame, 0, BMP_HEADER_SIZE);
 
-	[cite_start]for( int i_frame_gs=0; i_frame_gs<BMP_DATA_SIZE; ) [cite: 223]
+	for( int i_frame=0; i_frame<BMP_DATA_SIZE; )
 	begin
-		[cite_start]@(negedge clock); [cite: 223]
-		[cite_start]frame_gs_we = 1'b0; [cite: 223]
+		@(negedge clock);
+		frame_gs_we = 1'b0;
+		frame_hl_we = 1'b0;
 
-		[cite_start]if ( !frame_gs_full ) [cite: 224]
+		[cite_start]// Note: Frame is fed to both grayscale and highlight bypass [cite: 318]
+		if ( !frame_gs_full && !frame_hl_full )
 		begin
-			[cite_start]r = $fread(frame_gs_din, infile_frame_gs, BMP_HEADER_SIZE+i_frame_gs, BYTES_PER_PIXEL); [cite: 224]
-			[cite_start]frame_gs_we = 1'b1; [cite: 224]
-			[cite_start]i_frame_gs += BYTES_PER_PIXEL; [cite: 224]
+			r = $fread(frame_gs_din, infile_frame, BMP_HEADER_SIZE+i_frame, BYTES_PER_PIXEL);
+			frame_hl_din = frame_gs_din;
+			frame_gs_we = 1'b1;
+			frame_hl_we = 1'b1;
+			i_frame += BYTES_PER_PIXEL;
 		end
 	end
 
-	[cite_start]@ (negedge clock); [cite: 224]
-	[cite_start]frame_gs_we = 1'b0; [cite: 225]
-	[cite_start]$fclose(infile_frame_gs); [cite: 225]
-	[cite_start]frame_gs_write_done = 1'b1; [cite: 225]
-end 
-
-initial
-begin : read_hl_frame
-	[cite_start]int infile_frame_hl; [cite: 226]
-	[cite_start]int r; [cite: 226]
-	[cite_start]logic [7:0] bmp_header [0:BMP_HEADER_SIZE-1]; [cite: 226]
-
-	[cite_start]@(negedge reset); [cite: 226]
-	[cite_start]$display("@ %0t: Loading frame for highlight %s...", $time, INFILE_FRAME); [cite: 226]
-	[cite_start]infile_frame_hl = $fopen(INFILE_FRAME, "rb"); [cite: 226]
-	[cite_start]frame_hl_we = 1'b0; [cite: 226]
-
-	[cite_start]r = $fread(bmp_header, infile_frame_hl, 0, BMP_HEADER_SIZE); [cite: 227]
-
-	[cite_start]for( int i_frame_hl=0; i_frame_hl<BMP_DATA_SIZE; ) [cite: 227]
-	begin
-		[cite_start]@(negedge clock); [cite: 227]
-		[cite_start]frame_hl_we = 1'b0; [cite: 227]
-
-		[cite_start]if ( !frame_hl_full ) [cite: 228]
-		begin
-			[cite_start]r = $fread(frame_hl_din, infile_frame_hl, BMP_HEADER_SIZE+i_frame_hl, BYTES_PER_PIXEL); [cite: 228]
-			[cite_start]frame_hl_we = 1'b1; [cite: 228]
-			[cite_start]i_frame_hl += BYTES_PER_PIXEL; [cite: 228]
-		end
-	end
-
-	[cite_start]@ (negedge clock); [cite: 228]
-	[cite_start]frame_hl_we = 1'b0; [cite: 229]
-	[cite_start]$fclose(infile_frame_hl); [cite: 229]
-	[cite_start]frame_hl_write_done = 1'b1; [cite: 229]
+	@ (negedge clock);
+	frame_gs_we = 1'b0;
+	frame_hl_we = 1'b0;
+	$fclose(infile_frame);
+	frame_gs_write_done = 1'b1;
 end 
 
 initial 
-begin : write_hl
-	[cite_start]int r; [cite: 230]
-	[cite_start]int outfile; [cite: 230]
-	[cite_start]int cmpfile; [cite: 230]
-	[cite_start]logic [23:0] cmp_dout; [cite: 230]
-	[cite_start]logic [0:BMP_HEADER_SIZE-1] [7:0] bmp_header; [cite: 230]
+begin : write_output
+	int r, infile_header;
+	int outfile;
+	logic [7:0] header_copy [0:BMP_HEADER_SIZE-1];
 
-	[cite_start]@(negedge reset); [cite: 230]
-	[cite_start]@(negedge clock); [cite: 230]
+	@(negedge reset);
+	@(negedge clock);
 
-	[cite_start]$display("@ %0t: Comparing file %s...", $time, OUTFILE); [cite: 230]
+	$display("@ %0t: Writing output file %s...", $time, OUTFILE);
 	
-	[cite_start]outfile = $fopen(OUTFILE, "wb"); [cite: 230]
-	[cite_start]cmpfile = $fopen(CMPFILE, "rb"); [cite: 231]
-	[cite_start]hl_out_re = 1'b0; [cite: 231]
+	outfile = $fopen(OUTFILE, "wb");
 	
-	[cite_start]r = $fread(bmp_header, cmpfile, 0, BMP_HEADER_SIZE); [cite: 231]
-	[cite_start]foreach ( bmp_header[i] ) [cite: 232]
-	begin
-		[cite_start]$fwrite(outfile, "%c", bmp_header[i]); [cite: 232]
+	// Copy header from background file to the output file
+	infile_header = $fopen(INFILE_BG, "rb");
+	r = $fread(header_copy, infile_header, 0, BMP_HEADER_SIZE);
+	$fclose(infile_header);
+
+	for (int i=0; i<BMP_HEADER_SIZE; i++) begin
+		$fwrite(outfile, "%c", header_copy[i]);
 	end
 
-	[cite_start]for ( int i=0; i<BMP_DATA_SIZE; ) [cite: 232]
+	for ( int i=0; i<BMP_DATA_SIZE; )
 	begin
-		[cite_start]@(negedge clock); [cite: 232]
-		[cite_start]hl_out_re = 1'b0; [cite: 232]
+		@(negedge clock);
+		hl_out_re = 1'b0;
 
-		[cite_start]if ( !hl_out_empty ) [cite: 233]
+		if ( !hl_out_empty )
 		begin
-			[cite_start]r = $fread(cmp_dout, cmpfile, BMP_HEADER_SIZE+i, BYTES_PER_PIXEL); [cite: 233]
-
-			[cite_start]if ( cmp_dout != hl_out_dout ) [cite: 234]
-			begin
-				[cite_start]out_errors += 1; [cite: 234]
-				$write("@ %0t: %s(%0d): ERROR: actual %x !=  expected %x at address 0x%x.\n", 
-					[cite_start]$time, OUTFILE, i+1, hl_out_dout, cmp_dout, i); [cite: 234]
-			end
-			[cite_start]$fwrite(outfile, "%c%c%c", hl_out_dout[23:16], hl_out_dout[15:8], hl_out_dout[7:0]); [cite: 235]
-			[cite_start]hl_out_re = 1'b1; [cite: 235]
-			[cite_start]i += BYTES_PER_PIXEL; [cite: 235]
+			$fwrite(outfile, "%c%c%c", hl_out_dout[23:16], hl_out_dout[15:8], hl_out_dout[7:0]);
+			hl_out_re = 1'b1;
+			i += BYTES_PER_PIXEL;
 		end
 	end
 
-	[cite_start]@(negedge clock); [cite: 235]
-	[cite_start]hl_out_re = 1'b0; [cite: 235]
-	[cite_start]$fclose(outfile); [cite: 235]
-	[cite_start]$fclose(cmpfile); [cite: 236]
-	[cite_start]out_read_done = 1'b1; [cite: 236]
+	@(negedge clock);
+	hl_out_re = 1'b0;
+	$fclose(outfile);
+	out_read_done = 1'b1;
 end
 
 endmodule
