@@ -1,218 +1,116 @@
-`timescale 1 ns / 1 ns
+module motion_detect_top (
+    input  logic        clk,
+    input  logic        reset,
 
-module motion_detect_tb();
+    // External Inputs (Current Frame)
+    input  logic [23:0] frame_in_data,
+    input  logic        frame_in_valid,
+    output logic        frame_in_ready,
 
-localparam string INFILE_BG    = "base.bmp";
-localparam string INFILE_FRAME = "pedestrians.bmp";
-localparam string OUTFILE      = "output.bmp";
-localparam string CMPFILE      = "img_out.bmp";
-localparam CLOCK_PERIOD = 10;
+    // External Inputs (Background/Base Image)
+    input  logic [23:0] back_in_data,
+    input  logic        back_in_valid,
+    output logic        back_in_ready,
 
-logic clock = 1'b1;
-logic reset = '0;
-logic start = '0;
-logic done  = '0;
-
-// Signals mapped to your component names
-logic [23:0] frame_in_data;
-logic        frame_in_valid;
-logic        frame_in_ready;
-
-logic [23:0] back_in_data;
-logic        back_in_valid;
-logic        back_in_ready;
-
-logic [23:0] final_out_data;
-logic        final_out_valid;
-logic        final_out_ready;
-
-logic   hold_clock = '0;
-logic   bg_gs_write_done = '0;
-logic   frame_gs_write_done = '0;
-logic   out_read_done = '0;
-integer out_errors = '0;
-
-localparam WIDTH  = 768;
-localparam HEIGHT = 576;
-localparam BMP_HEADER_SIZE = 54;
-localparam BYTES_PER_PIXEL = 3;
-localparam BMP_DATA_SIZE = WIDTH * HEIGHT * BYTES_PER_PIXEL;
-
-// Instance updated to your module and port names
-motion_detect_top motion_detect_top_inst (
-    .clk(clock),
-    .reset(reset),
-
-    .frame_in_data(frame_in_data),
-    .frame_in_valid(frame_in_valid),
-    .frame_in_ready(frame_in_ready),
-
-    .back_in_data(back_in_data),
-    .back_in_valid(back_in_valid),
-    .back_in_ready(back_in_ready),
-
-    .final_out_data(final_out_data),
-    .final_out_valid(final_out_valid),
-    .final_out_ready(final_out_ready)
+    // External Output
+    output logic [23:0] final_out_data,
+    output logic        final_out_valid,
+    input  logic        final_out_ready
 );
 
-always begin
-    clock = 1'b1;
-    #(CLOCK_PERIOD/2);
-    clock = 1'b0;
-    #(CLOCK_PERIOD/2);
-end
-
-initial begin
-    @(posedge clock);
-    reset = 1'b1;
-    @(posedge clock);
-    reset = 1'b0;
-end
-
-initial
-begin : driver
-    longint unsigned start_time, end_time;
-    string diffcmd; 
-
-    @(negedge reset);
-    @(posedge clock);
-    start_time = $time;
-
-    $display("@ %0t: Beginning simulation...", start_time);
-    start = 1'b1;
-    @(posedge clock);
-    start = 1'b0;
-
-    wait(out_read_done);
-    end_time = $time;
-
-    $display();
-    $display("@ %0t: Simulation completed.", end_time);
-    $display("Total simulation cycle count: %0d", (end_time-start_time)/CLOCK_PERIOD);
-    $display("Total error count: %0d", out_errors);
+    // --- Internal Wiring ---
+    // Grayscale Outputs
+    logic [7:0] gs_frame_out, gs_back_out;
+    logic       gs_frame_wr, gs_back_wr;
     
-    $display("---------------------------------------");
-    $display("Output file diff:");
-    $swrite( diffcmd, "diff %s %s", OUTFILE, CMPFILE );
-    $display( "$ %s\n", diffcmd );
-    $system( diffcmd );
-    $display("\nEnd diff");
+    // Grayscale-to-Subtractor FIFO Signals
+    logic [7:0] fifo_gs_frame_dout, fifo_gs_back_dout;
+    logic       fifo_gs_frame_empty, fifo_gs_back_empty;
 
-    $finish;
-end
-
-initial
-begin : read_bg
-    int infile_bg;
-    int r;
-    logic [7:0] bmp_header [0:BMP_HEADER_SIZE-1];
-
-    @(negedge reset);
-    $display("@ %0t: Loading bg for grayscale %s...", $time, INFILE_BG);
-    infile_bg = $fopen(INFILE_BG, "rb");
-    back_in_valid = 1'b0;
-
-    r = $fread(bmp_header, infile_bg, 0, BMP_HEADER_SIZE);
-
-    for( int i_bg=0; i_bg<BMP_DATA_SIZE; ) 
-    begin
-        @(negedge clock);
-        back_in_valid = 1'b0;
-
-        if ( back_in_ready ) // back_in_ready is the inverse of his bg_gs_full
-        begin
-            r = $fread(back_in_data, infile_bg, BMP_HEADER_SIZE+i_bg, BYTES_PER_PIXEL);
-            back_in_valid = 1'b1;
-            i_bg += BYTES_PER_PIXEL;
-        end
-    end
-
-    @(negedge clock);
-    back_in_valid = 1'b0;
-    $fclose(infile_bg);
-    bg_gs_write_done = 1'b1;
-end
-
-initial
-begin : read_gs_frame
-    int infile_frame_gs;
-    int r;
-    logic [7:0] bmp_header [0:BMP_HEADER_SIZE-1];
-
-    @(negedge reset);
-    $display("@ %0t: Loading frame for grayscale %s...", $time, INFILE_FRAME);
-
-    infile_frame_gs = $fopen(INFILE_FRAME, "rb");
-    frame_in_valid = 1'b0;
-
-    r = $fread(bmp_header, infile_frame_gs, 0, BMP_HEADER_SIZE);
-
-    for( int i_frame_gs=0; i_frame_gs<BMP_DATA_SIZE; ) 
-    begin
-        @(negedge clock);
-        frame_in_valid = 1'b0;
-
-        if ( frame_in_ready )
-        begin
-            r = $fread(frame_in_data, infile_frame_gs, BMP_HEADER_SIZE+i_frame_gs, BYTES_PER_PIXEL);
-            frame_in_valid = 1'b1;
-            i_frame_gs += BYTES_PER_PIXEL;
-        end
-    end
-
-    @ (negedge clock);
-    frame_in_valid = 1'b0;
-    $fclose(infile_frame_gs);
-    frame_gs_write_done = 1'b1;
-end 
-
-initial 
-begin : write_hl
-    int r;
-    int outfile;
-    int cmpfile;
-    logic [23:0] cmp_dout;
-    logic [0:BMP_HEADER_SIZE-1] [7:0] bmp_header;
-
-    @(negedge reset);
-    @(negedge clock);
-
-    $display("@ %0t: Comparing file %s...", $time, OUTFILE);
+    // Subtractor (bg_subtract) Control Signals
+    logic       sub_init_re, sub_new_re, sub_we;
+    logic [7:0] sub_comp_frame;
     
-    outfile = $fopen(OUTFILE, "wb");
-    cmpfile = $fopen(CMPFILE, "rb");
-    final_out_ready = 1'b1; // Testbench is always ready to receive
+    // Mask-to-Highlight FIFO Signals
+    logic [7:0] mask_fifo_dout;
+    logic       mask_fifo_empty, mask_fifo_full;
     
-    r = $fread(bmp_header, cmpfile, 0, BMP_HEADER_SIZE);
-    foreach ( bmp_header[i] )
-    begin
-        $fwrite(outfile, "%c", bmp_header[i]);
-    end
+    // Bypass FIFO Signals (Original Frame RGB)
+    logic [23:0] bypass_dout;
+    logic        bypass_empty, bypass_full;
 
-    for ( int i=0; i<BMP_DATA_SIZE; )
-    begin
-        @(negedge clock);
-        // Logic to capture output when valid
-        if ( final_out_valid )
-        begin
-            r = $fread(cmp_dout, cmpfile, BMP_HEADER_SIZE+i, BYTES_PER_PIXEL);
+    // Highlight Control Signals
+    logic mask_re, highlighter_re;
 
-            if ( cmp_dout != final_out_data ) 
-            begin
-                out_errors += 1;
-                $write("@ %0t: %s(%0d): ERROR: actual %x != expected %x at address 0x%x.\n", 
-                        $time, OUTFILE, i+1, final_out_data, cmp_dout, i);
-            end
-            $fwrite(outfile, "%c%c%c", final_out_data[23:16], final_out_data[15:8], final_out_data[7:0]);
-            i += BYTES_PER_PIXEL;
-        end
-    end
+    // --- 1. Grayscale Processing Paths ---
+    // Frame Grayscale
+    grayscale frame_gs_inst (
+        .clock(clk), .reset(reset),
+        .in_dout(frame_in_data), .in_empty(!frame_in_valid), .in_rd_en(frame_in_ready),
+        .out_din(gs_frame_out), .out_wr_en(gs_frame_wr), .out_full(1'b0) 
+    );
 
-    @(negedge clock);
-    $fclose(outfile);
-    $fclose(cmpfile);
-    out_read_done = 1'b1;
-end
+    // Background Grayscale
+    grayscale back_gs_inst (
+        .clock(clk), .reset(reset),
+        .in_dout(back_in_data), .in_empty(!back_in_valid), .in_rd_en(back_in_ready),
+        .out_din(gs_back_out), .out_wr_en(gs_back_wr), .out_full(1'b0)
+    );
+
+    // --- 2. Intermediate FIFOs ---
+    // Buffers grayscale data for the subtractor
+    fifo #(.FIFO_DATA_WIDTH(8), .FIFO_BUFFER_SIZE(32)) fifo_gs_frame (
+        .reset(reset), .wr_clk(clk), .rd_clk(clk),
+        .din(gs_frame_out), .wr_en(gs_frame_wr), 
+        .dout(fifo_gs_frame_dout), .empty(fifo_gs_frame_empty), .rd_en(sub_new_re)
+    );
+
+    fifo #(.FIFO_DATA_WIDTH(8), .FIFO_BUFFER_SIZE(32)) fifo_gs_back (
+        .reset(reset), .wr_clk(clk), .rd_clk(clk),
+        .din(gs_back_out), .wr_en(gs_back_wr),
+        .dout(fifo_gs_back_dout), .empty(fifo_gs_back_empty), .rd_en(sub_init_re)
+    );
+
+    // Delays original RGB frame to match processing latency
+    fifo #(.FIFO_DATA_WIDTH(24), .FIFO_BUFFER_SIZE(64)) fifo_bypass (
+        .reset(reset), .wr_clk(clk), .rd_clk(clk),
+        .din(frame_in_data), .wr_en(frame_in_ready), .full(bypass_full),
+        .dout(bypass_dout), .empty(bypass_empty), .rd_en(highlighter_re)
+    );
+
+    // --- 3. Subtractor Stage (bg_subtract) ---
+    bg_subtract #(.THRESHOLD(50)) sub_inst (
+        .clk(clk), .rst(reset),
+        .init_fifo_empty(fifo_gs_back_empty),
+        .init_frame_data(fifo_gs_back_dout),
+        .new_fifo_empty(fifo_gs_frame_empty),
+        .new_frame_data(fifo_gs_frame_dout),
+        .fifo_full(mask_fifo_full),
+        .comp_RE(sub_init_re),
+        .RE(sub_new_re),
+        .WE(sub_we),
+        .comp_frame(sub_comp_frame)
+    );
+
+    // Mask FIFO (stores the motion results from subtractor)
+    fifo #(.FIFO_DATA_WIDTH(8), .FIFO_BUFFER_SIZE(32)) fifo_mask (
+        .reset(reset), .wr_clk(clk), .rd_clk(clk),
+        .din(sub_comp_frame), .wr_en(sub_we), .full(mask_fifo_full),
+        .dout(mask_fifo_dout), .empty(mask_fifo_empty), .rd_en(mask_re)
+    );
+
+    // --- 4. Highlight Stage (highlight) ---
+    highlight highlight_inst (
+        .clk(clk), .reset(reset),
+        .Grayscale_empty(mask_fifo_empty),
+        .grayscale_in(mask_fifo_dout),
+        .frame_empty(bypass_empty),
+        .init_fram(bypass_dout),
+        .out_full(!final_out_ready),
+        .Grayscale_RE(mask_re),
+        .frame_re(highlighter_re),
+        .dout_we(final_out_valid),
+        .dout(final_out_data)
+    );
 
 endmodule
