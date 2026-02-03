@@ -1,0 +1,111 @@
+`timescale 1ns/1ps
+
+module motion_detect_tb();
+
+    // Clock and Reset
+    logic clk = 0;
+    logic reset;
+
+    // Interface Signals (Matching Top Level)
+    logic [23:0] frame_in_data, back_in_data;
+    logic        frame_in_valid, back_in_valid;
+    logic        frame_in_ready, back_in_ready;
+
+    logic [23:0] final_out_data;
+    logic        final_out_valid;
+    logic        final_out_ready;
+
+    // File Handles
+    int f_frame, f_back, f_out;
+    int i, r;
+    logic [7:0] header [54];
+
+    // Clock Generation (100MHz)
+    always #5 clk = ~clk;
+
+    // Instantiate Your Updated Top Level
+    motion_detect_top dut (
+        .clk(clk),
+        .reset(reset),
+        .frame_in_data(frame_in_data),
+        .frame_in_valid(frame_in_valid),
+        .frame_in_ready(frame_in_ready),
+        .back_in_data(back_in_data),
+        .back_in_valid(back_in_valid),
+        .back_in_ready(back_in_ready),
+        .final_out_data(final_out_data),
+        .final_out_valid(final_out_valid),
+        .final_out_ready(final_out_ready)
+    );
+
+    // Initial Block for Setup
+    initial begin
+        reset = 1;
+        frame_in_valid = 0;
+        back_in_valid = 0;
+        final_out_ready = 1; // Sink is always ready
+
+        // Open BMP files
+        f_frame = $fopen("frame.bmp", "rb");
+        f_back  = $fopen("back.bmp",  "rb");
+        f_out   = $fopen("output.bmp", "wb");
+
+        if (f_frame == 0 || f_back == 0) begin
+            $display("Error: Could not open input files.");
+            $finish;
+        end
+
+        // Copy 54-byte BMP Header
+        for (i = 0; i < 54; i++) begin
+            r = $fread(header[i], f_frame);
+            r = $fread(header[i], f_back);
+            $fwrite(f_out, "%c", header[i]);
+        end
+
+        #20 reset = 0;
+    end
+
+    // Driving Inputs
+    always @(posedge clk) begin
+        if (!reset) begin
+            // Frame Data Stream
+            if (frame_in_ready && !$feof(f_frame)) begin
+                frame_in_valid <= 1;
+                r = $fread(frame_in_data[7:0],   f_frame); // B
+                r = $fread(frame_in_data[15:8],  f_frame); // G
+                r = $fread(frame_in_data[23:16], f_frame); // R
+            end else if (frame_in_ready) begin
+                frame_in_valid <= 0;
+            end
+
+            // Background Data Stream
+            if (back_in_ready && !$feof(f_back)) begin
+                back_in_valid <= 1;
+                r = $fread(back_in_data[7:0],   f_back);
+                r = $fread(back_in_data[15:8],  f_back);
+                r = $fread(back_in_data[23:16], f_back);
+            end else if (back_in_ready) begin
+                back_in_valid <= 0;
+            end
+        end
+    end
+
+    // Writing Output File
+    always @(posedge clk) begin
+        if (final_out_valid && final_out_ready) begin
+            $fwrite(f_out, "%c", final_out_data[7:0]);
+            $fwrite(f_out, "%c", final_out_data[15:8]);
+            $fwrite(f_out, "%c", final_out_data[23:16]);
+        end
+    end
+
+    // End Simulation
+    always @(posedge clk) begin
+        if ($feof(f_frame) && !final_out_valid) begin
+            $display("Simulation Finished: Image processed successfully.");
+            $fclose(f_frame); $fclose(f_back); $fclose(f_out);
+            $finish;
+        end
+    end
+
+endmodule
