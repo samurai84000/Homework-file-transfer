@@ -1,55 +1,84 @@
-module final_comparator #(
-    parameter DATA_INPUT = 24,
-    parameter DATA_OUTPUT = 24
-)(
-    input  logic                   clk,
-    input  logic                   reset,
-    input  logic                   subtracted_frame_data, // Motion mask
-    input  logic [DATA_INPUT-1:0]  orig_frame_data,       // Original RGB pixel
-    input  logic                   ready,                 // FIFOs status signal
-    output logic [DATA_OUTPUT-1:0] output_data,
-    output logic                   valid_data
+module highlight (
+	input  logic		clk,
+	input  logic		reset,
+
+	input  logic		Grayscale_empty,
+	input  logic [7:0]  grayscale_in,
+	input  logic		frame_empty,
+	input  logic [23:0] init_fram,
+	input  logic		out_full,
+
+	output logic		Grayscale_RE,
+	output logic		frame_re,
+	output logic		dout_we,
+	output logic [23:0] dout
 );
 
-    typedef enum logic [0:0] {IDLE, RUNNING} state_t;
-    state_t curr_state, next_state;
+typedef enum logic [1:0] {s0, s1} state_t;
+state_t state, state_c;
 
-    // --- Process 1: Sequential Logic (State Register) ---
-    always_ff @(posedge clk or posedge reset) begin
-        if (reset) begin
-            curr_state <= IDLE;
-        end else begin
-            curr_state <= next_state;
-        end
-    end
+logic [23:0] hl, hl_c;
 
-    // --- Process 2: Combinational Logic (Next State & Outputs) ---
-    always_comb begin
-        // Default assignments to prevent latches and ensure clean logic
-        next_state = curr_state;
-        valid_data = 1'b0;
-        output_data = '0;
+localparam HIGHLIGHT = 24'h0000ff;
 
-        case (curr_state)
-            IDLE: begin
-                if (ready) begin
-                    // Core logic: Select Red if motion, otherwise original pixel
-                    output_data = (subtracted_frame_data) ? 24'hFF0000 : orig_frame_data;
-                    valid_data  = 1'b1;
-                    next_state  = RUNNING;
-                end
-            end
+always_ff @ (posedge clk, posedge reset)
+begin
+	if (reset == 1'b1) begin
+		state <= s0;
+		hl <= 'h0;
+	end else begin
+		state <= state_c;
+		hl <= hl_c;
+	end
+end
 
-            RUNNING: begin
-                if (ready) begin
-                    output_data = (subtracted_frame_data) ? 24'hFF0000 : orig_frame_data;
-                    valid_data  = 1'b1;
-                    next_state  = RUNNING; // Stay in RUNNING while ready
-                end else begin
-                    next_state  = IDLE;    // Return to IDLE if data stream pauses
-                end
-            end
-        endcase
-    end
+always_comb
+begin
+	Grayscale_RE = 'b0;
+	frame_re  = 'b0;
+
+	dout_we    = 1'b0;
+	dout   = 'h0;
+
+	state_c   = state;
+	hl_c      = hl;
+
+	case (state)
+		s0:
+		begin
+			if ( (!Grayscale_empty) && (!frame_empty) )
+			begin
+				hl_c = grayscale_in == 8'hff ? HIGHLIGHT : init_fram; 
+
+				Grayscale_RE = 'b1;
+				frame_re  = 'b1;
+
+				state_c = s1;
+			end
+		end
+
+		s1: 
+		begin
+			if (out_full == 1'b0)
+			begin
+				dout = hl;
+				dout_we = 'b1;
+
+				state_c = s0;
+			end
+		end
+
+		default:
+		begin
+			Grayscale_RE = 'b0;
+			frame_re  = 'b0;
+			dout_we    = 'b0;
+			dout   = 'h0;
+			state_c   = s0;
+			hl_c      = 'hx;
+		end
+
+	endcase
+end
 
 endmodule
