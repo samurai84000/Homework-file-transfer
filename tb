@@ -1,111 +1,218 @@
-`timescale 1ns/1ps
+`timescale 1 ns / 1 ns
 
 module motion_detect_tb();
 
-    // Clock and Reset
-    logic clk = 0;
-    logic reset;
+localparam string INFILE_BG    = "base.bmp";
+localparam string INFILE_FRAME = "pedestrians.bmp";
+localparam string OUTFILE      = "output.bmp";
+localparam string CMPFILE      = "img_out.bmp";
+localparam CLOCK_PERIOD = 10;
 
-    // Interface Signals (Matching Top Level)
-    logic [23:0] frame_in_data, back_in_data;
-    logic        frame_in_valid, back_in_valid;
-    logic        frame_in_ready, back_in_ready;
+logic clock = 1'b1;
+logic reset = '0;
+logic start = '0;
+logic done  = '0;
 
-    logic [23:0] final_out_data;
-    logic        final_out_valid;
-    logic        final_out_ready;
+// Signals mapped to your component names
+logic [23:0] frame_in_data;
+logic        frame_in_valid;
+logic        frame_in_ready;
 
-    // File Handles
-    int f_frame, f_back, f_out;
-    int i, r;
-    logic [7:0] header [54];
+logic [23:0] back_in_data;
+logic        back_in_valid;
+logic        back_in_ready;
 
-    // Clock Generation (100MHz)
-    always #5 clk = ~clk;
+logic [23:0] final_out_data;
+logic        final_out_valid;
+logic        final_out_ready;
 
-    // Instantiate Your Updated Top Level
-    motion_detect_top dut (
-        .clk(clk),
-        .reset(reset),
-        .frame_in_data(frame_in_data),
-        .frame_in_valid(frame_in_valid),
-        .frame_in_ready(frame_in_ready),
-        .back_in_data(back_in_data),
-        .back_in_valid(back_in_valid),
-        .back_in_ready(back_in_ready),
-        .final_out_data(final_out_data),
-        .final_out_valid(final_out_valid),
-        .final_out_ready(final_out_ready)
-    );
+logic   hold_clock = '0;
+logic   bg_gs_write_done = '0;
+logic   frame_gs_write_done = '0;
+logic   out_read_done = '0;
+integer out_errors = '0;
 
-    // Initial Block for Setup
-    initial begin
-        reset = 1;
-        frame_in_valid = 0;
-        back_in_valid = 0;
-        final_out_ready = 1; // Sink is always ready
+localparam WIDTH  = 768;
+localparam HEIGHT = 576;
+localparam BMP_HEADER_SIZE = 54;
+localparam BYTES_PER_PIXEL = 3;
+localparam BMP_DATA_SIZE = WIDTH * HEIGHT * BYTES_PER_PIXEL;
 
-        // Open BMP files
-        f_frame = $fopen("frame.bmp", "rb");
-        f_back  = $fopen("back.bmp",  "rb");
-        f_out   = $fopen("output.bmp", "wb");
+// Instance updated to your module and port names
+motion_detect_top motion_detect_top_inst (
+    .clk(clock),
+    .reset(reset),
 
-        if (f_frame == 0 || f_back == 0) begin
-            $display("Error: Could not open input files.");
-            $finish;
+    .frame_in_data(frame_in_data),
+    .frame_in_valid(frame_in_valid),
+    .frame_in_ready(frame_in_ready),
+
+    .back_in_data(back_in_data),
+    .back_in_valid(back_in_valid),
+    .back_in_ready(back_in_ready),
+
+    .final_out_data(final_out_data),
+    .final_out_valid(final_out_valid),
+    .final_out_ready(final_out_ready)
+);
+
+always begin
+    clock = 1'b1;
+    #(CLOCK_PERIOD/2);
+    clock = 1'b0;
+    #(CLOCK_PERIOD/2);
+end
+
+initial begin
+    @(posedge clock);
+    reset = 1'b1;
+    @(posedge clock);
+    reset = 1'b0;
+end
+
+initial
+begin : driver
+    longint unsigned start_time, end_time;
+    string diffcmd; 
+
+    @(negedge reset);
+    @(posedge clock);
+    start_time = $time;
+
+    $display("@ %0t: Beginning simulation...", start_time);
+    start = 1'b1;
+    @(posedge clock);
+    start = 1'b0;
+
+    wait(out_read_done);
+    end_time = $time;
+
+    $display();
+    $display("@ %0t: Simulation completed.", end_time);
+    $display("Total simulation cycle count: %0d", (end_time-start_time)/CLOCK_PERIOD);
+    $display("Total error count: %0d", out_errors);
+    
+    $display("---------------------------------------");
+    $display("Output file diff:");
+    $swrite( diffcmd, "diff %s %s", OUTFILE, CMPFILE );
+    $display( "$ %s\n", diffcmd );
+    $system( diffcmd );
+    $display("\nEnd diff");
+
+    $finish;
+end
+
+initial
+begin : read_bg
+    int infile_bg;
+    int r;
+    logic [7:0] bmp_header [0:BMP_HEADER_SIZE-1];
+
+    @(negedge reset);
+    $display("@ %0t: Loading bg for grayscale %s...", $time, INFILE_BG);
+    infile_bg = $fopen(INFILE_BG, "rb");
+    back_in_valid = 1'b0;
+
+    r = $fread(bmp_header, infile_bg, 0, BMP_HEADER_SIZE);
+
+    for( int i_bg=0; i_bg<BMP_DATA_SIZE; ) 
+    begin
+        @(negedge clock);
+        back_in_valid = 1'b0;
+
+        if ( back_in_ready ) // back_in_ready is the inverse of his bg_gs_full
+        begin
+            r = $fread(back_in_data, infile_bg, BMP_HEADER_SIZE+i_bg, BYTES_PER_PIXEL);
+            back_in_valid = 1'b1;
+            i_bg += BYTES_PER_PIXEL;
         end
-
-        // Copy 54-byte BMP Header
-        for (i = 0; i < 54; i++) begin
-            r = $fread(header[i], f_frame);
-            r = $fread(header[i], f_back);
-            $fwrite(f_out, "%c", header[i]);
-        end
-
-        #20 reset = 0;
     end
 
-    // Driving Inputs
-    always @(posedge clk) begin
-        if (!reset) begin
-            // Frame Data Stream
-            if (frame_in_ready && !$feof(f_frame)) begin
-                frame_in_valid <= 1;
-                r = $fread(frame_in_data[7:0],   f_frame); // B
-                r = $fread(frame_in_data[15:8],  f_frame); // G
-                r = $fread(frame_in_data[23:16], f_frame); // R
-            end else if (frame_in_ready) begin
-                frame_in_valid <= 0;
+    @(negedge clock);
+    back_in_valid = 1'b0;
+    $fclose(infile_bg);
+    bg_gs_write_done = 1'b1;
+end
+
+initial
+begin : read_gs_frame
+    int infile_frame_gs;
+    int r;
+    logic [7:0] bmp_header [0:BMP_HEADER_SIZE-1];
+
+    @(negedge reset);
+    $display("@ %0t: Loading frame for grayscale %s...", $time, INFILE_FRAME);
+
+    infile_frame_gs = $fopen(INFILE_FRAME, "rb");
+    frame_in_valid = 1'b0;
+
+    r = $fread(bmp_header, infile_frame_gs, 0, BMP_HEADER_SIZE);
+
+    for( int i_frame_gs=0; i_frame_gs<BMP_DATA_SIZE; ) 
+    begin
+        @(negedge clock);
+        frame_in_valid = 1'b0;
+
+        if ( frame_in_ready )
+        begin
+            r = $fread(frame_in_data, infile_frame_gs, BMP_HEADER_SIZE+i_frame_gs, BYTES_PER_PIXEL);
+            frame_in_valid = 1'b1;
+            i_frame_gs += BYTES_PER_PIXEL;
+        end
+    end
+
+    @ (negedge clock);
+    frame_in_valid = 1'b0;
+    $fclose(infile_frame_gs);
+    frame_gs_write_done = 1'b1;
+end 
+
+initial 
+begin : write_hl
+    int r;
+    int outfile;
+    int cmpfile;
+    logic [23:0] cmp_dout;
+    logic [0:BMP_HEADER_SIZE-1] [7:0] bmp_header;
+
+    @(negedge reset);
+    @(negedge clock);
+
+    $display("@ %0t: Comparing file %s...", $time, OUTFILE);
+    
+    outfile = $fopen(OUTFILE, "wb");
+    cmpfile = $fopen(CMPFILE, "rb");
+    final_out_ready = 1'b1; // Testbench is always ready to receive
+    
+    r = $fread(bmp_header, cmpfile, 0, BMP_HEADER_SIZE);
+    foreach ( bmp_header[i] )
+    begin
+        $fwrite(outfile, "%c", bmp_header[i]);
+    end
+
+    for ( int i=0; i<BMP_DATA_SIZE; )
+    begin
+        @(negedge clock);
+        // Logic to capture output when valid
+        if ( final_out_valid )
+        begin
+            r = $fread(cmp_dout, cmpfile, BMP_HEADER_SIZE+i, BYTES_PER_PIXEL);
+
+            if ( cmp_dout != final_out_data ) 
+            begin
+                out_errors += 1;
+                $write("@ %0t: %s(%0d): ERROR: actual %x != expected %x at address 0x%x.\n", 
+                        $time, OUTFILE, i+1, final_out_data, cmp_dout, i);
             end
-
-            // Background Data Stream
-            if (back_in_ready && !$feof(f_back)) begin
-                back_in_valid <= 1;
-                r = $fread(back_in_data[7:0],   f_back);
-                r = $fread(back_in_data[15:8],  f_back);
-                r = $fread(back_in_data[23:16], f_back);
-            end else if (back_in_ready) begin
-                back_in_valid <= 0;
-            end
+            $fwrite(outfile, "%c%c%c", final_out_data[23:16], final_out_data[15:8], final_out_data[7:0]);
+            i += BYTES_PER_PIXEL;
         end
     end
 
-    // Writing Output File
-    always @(posedge clk) begin
-        if (final_out_valid && final_out_ready) begin
-            $fwrite(f_out, "%c", final_out_data[7:0]);
-            $fwrite(f_out, "%c", final_out_data[15:8]);
-            $fwrite(f_out, "%c", final_out_data[23:16]);
-        end
-    end
-
-    // End Simulation
-    always @(posedge clk) begin
-        if ($feof(f_frame) && !final_out_valid) begin
-            $display("Simulation Finished: Image processed successfully.");
-            $fclose(f_frame); $fclose(f_back); $fclose(f_out);
-            $finish;
-        end
-    end
+    @(negedge clock);
+    $fclose(outfile);
+    $fclose(cmpfile);
+    out_read_done = 1'b1;
+end
 
 endmodule
