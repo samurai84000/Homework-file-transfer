@@ -39,20 +39,23 @@ module motion_detect_top (
     logic [23:0] bypass_dout;
     logic        bypass_empty, bypass_full;
 
+    // Highlight Control Signals
+    logic mask_re, highlighter_re;
+
     // --- 1. Grayscale Processing Paths ---
     // Frame Grayscale
     grayscale frame_gs_inst (
         .clock(clk), .reset(reset),
         .in_dout(frame_in_data), .in_empty(!frame_in_valid), .in_rd_en(frame_in_ready),
         .out_din(gs_frame_out), .out_wr_en(gs_frame_wr), .out_full(1'b0) 
-    )[cite: 31, 37, 38];
+    );
 
     // Background Grayscale
     grayscale back_gs_inst (
         .clock(clk), .reset(reset),
         .in_dout(back_in_data), .in_empty(!back_in_valid), .in_rd_en(back_in_ready),
         .out_din(gs_back_out), .out_wr_en(gs_back_wr), .out_full(1'b0)
-    )[cite: 31, 37, 38];
+    );
 
     // --- 2. Intermediate FIFOs ---
     // Buffers grayscale data for the subtractor
@@ -60,20 +63,20 @@ module motion_detect_top (
         .reset(reset), .wr_clk(clk), .rd_clk(clk),
         .din(gs_frame_out), .wr_en(gs_frame_wr), 
         .dout(fifo_gs_frame_dout), .empty(fifo_gs_frame_empty), .rd_en(sub_new_re)
-    )[cite: 1, 90];
+    );
 
     fifo #(.FIFO_DATA_WIDTH(8), .FIFO_BUFFER_SIZE(32)) fifo_gs_back (
         .reset(reset), .wr_clk(clk), .rd_clk(clk),
         .din(gs_back_out), .wr_en(gs_back_wr),
         .dout(fifo_gs_back_dout), .empty(fifo_gs_back_empty), .rd_en(sub_init_re)
-    )[cite: 1, 91];
+    );
 
     // Delays original RGB frame to match processing latency
     fifo #(.FIFO_DATA_WIDTH(24), .FIFO_BUFFER_SIZE(64)) fifo_bypass (
         .reset(reset), .wr_clk(clk), .rd_clk(clk),
         .din(frame_in_data), .wr_en(frame_in_ready), .full(bypass_full),
         .dout(bypass_dout), .empty(bypass_empty), .rd_en(highlighter_re)
-    )[cite: 40, 92];
+    );
 
     // --- 3. Subtractor Stage (bg_subtract) ---
     bg_subtract #(.THRESHOLD(50)) sub_inst (
@@ -94,11 +97,9 @@ module motion_detect_top (
         .reset(reset), .wr_clk(clk), .rd_clk(clk),
         .din(sub_comp_frame), .wr_en(sub_we), .full(mask_fifo_full),
         .dout(mask_fifo_dout), .empty(mask_fifo_empty), .rd_en(mask_re)
-    )[cite: 1, 95];
+    );
 
     // --- 4. Highlight Stage (highlight) ---
-    logic mask_re, highlighter_re;
-
     highlight highlight_inst (
         .clk(clk), .reset(reset),
         .Grayscale_empty(mask_fifo_empty),
@@ -110,6 +111,6 @@ module motion_detect_top (
         .frame_re(highlighter_re),
         .dout_we(final_out_valid),
         .dout(final_out_data)
-    )[cite: 69, 74, 75];
+    );
 
 endmodule
