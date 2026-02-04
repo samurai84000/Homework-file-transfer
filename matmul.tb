@@ -4,31 +4,31 @@ module matmul_tb();
 
     localparam DATA_WIDTH = 32;
     localparam MAT_DIM_WIDTH = 3; /* 8x8 */
-    localparam MAT_DIM_SIZE = 2 ** MAT_DIM_WIDTH; [cite: 35, 36]
+    localparam MAT_DIM_SIZE = 2 ** MAT_DIM_WIDTH; 
     localparam ADDR_WIDTH = MAT_DIM_WIDTH * 2;
-    localparam MAT_SIZE = 2 ** ADDR_WIDTH; [cite: 36]
+    localparam MAT_SIZE = 2 ** ADDR_WIDTH; 
 
     localparam X_PATH = "../x.txt";
     localparam Y_PATH = "../y.txt";
-    localparam Z_PATH = "../z.txt"; [cite: 37, 38]
+    localparam Z_PATH = "../z.txt"; 
 
     localparam PERIOD = 10;
 
     logic clk = 'b1;
     logic rst = 'b0;
     logic start = 'b0;
-    logic calculation_done; [cite: 38]
+    logic calculation_done; 
 
     logic [ MAT_DIM_SIZE-1 : 0 ] mat_x_we = 'b0;
-    logic [ MAT_DIM_SIZE-1 : 0 ] mat_y_we = 'b0; [cite: 39]
+    logic [ MAT_DIM_SIZE-1 : 0 ] mat_y_we = 'b0; 
     logic [ DATA_WIDTH-1 : 0 ]   mat_x_w_data = 'b0;
-    logic [ DATA_WIDTH-1 : 0 ]   mat_y_w_data = 'b0; [cite: 40]
+    logic [ DATA_WIDTH-1 : 0 ]   mat_y_w_data = 'b0;
     
     logic [ MAT_DIM_WIDTH-1 : 0 ] mat_x_w_addr = 'b0;
-    logic [ MAT_DIM_WIDTH-1 : 0 ] mat_y_w_addr = 'b0; [cite: 41]
+    logic [ MAT_DIM_WIDTH-1 : 0 ] mat_y_w_addr = 'b0; 
 
     logic [ ADDR_WIDTH-1 : 0 ] res_r_addr = 'b0;
-    logic [ DATA_WIDTH-1 : 0 ] res_r_data; [cite: 42]
+    logic [ DATA_WIDTH-1 : 0 ] res_r_data; 
 
     // Instantiate updated matmul_top with renamed ports
     matmul_top #(
@@ -50,24 +50,24 @@ module matmul_tb();
         .res_r_addr( res_r_addr ),
         .res_r_data( res_r_data ),
         .calculation_done( calculation_done )
-    ); [cite: 43]
+    ); 
 
     // Clock Generation
     always begin
         #(PERIOD/2);
         clk = ~clk;
-    end [cite: 44]
+    end 
 
     logic [ DATA_WIDTH-1 : 0 ] x_buf [ MAT_SIZE-1 : 0 ];
     logic [ DATA_WIDTH-1 : 0 ] y_buf [ MAT_SIZE-1 : 0 ];
     logic [ DATA_WIDTH-1 : 0 ] z_buf [ MAT_SIZE-1 : 0 ];
-    logic [63:0] starttime = 0; [cite: 44, 45]
+    logic [63:0] starttime = 0; 
 
     initial begin
         // Initialize memory buffers
         $readmemh( X_PATH, x_buf );
         $readmemh( Y_PATH, y_buf );
-        $readmemh( Z_PATH, z_buf ); [cite: 45]
+        $readmemh( Z_PATH, z_buf );
 
         /* Load X and Y matrices into BRAMs */
         #PERIOD;
@@ -84,10 +84,10 @@ module matmul_tb();
                 mat_x_we = 'b0;
                 mat_y_we = 'b0;
             end
-        end [cite: 46, 47, 49, 50]
+        end 
 
         $display( "@ %0d\tMatrix Load Complete", $time );
-        starttime = $time; [cite: 50, 51]
+        starttime = $time; 
 
         /* Start Matrix Multiplication */
         #PERIOD;
@@ -97,7 +97,7 @@ module matmul_tb();
         rst = 'b0;
         start = 'b1;
         @ ( negedge clk );
-        start = 'b0; [cite: 51, 52]
+        start = 'b0; 
 
         // Wait for pipelined execution to finish
         wait ( calculation_done );
@@ -105,7 +105,7 @@ module matmul_tb();
             "@ %0d\tMatmul complete, took ~%0d cycles", 
             $time,
             ($time - starttime) / (PERIOD)
-        ); [cite: 52, 53]
+        ); 
 
         /* Verify Results in Result Matrix (Z) */
         #PERIOD;
@@ -122,7 +122,7 @@ module matmul_tb();
                     i, j, z_buf[ res_r_addr ], res_r_data
                 );
             end
-        end [cite: 54, 55, 56]
+        end 
 
         $stop;
     end
