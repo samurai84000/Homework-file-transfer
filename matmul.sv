@@ -8,7 +8,7 @@ module matmul
 )
 (
     input  logic clk,
-    input  logic rst, // Changed to match matmul_top
+    input  logic rst, // Changed to match matmul_top [cite: 33]
     input  logic start_cmd,
     input  logic [ DIM_SIZE-1 : 0 ] [ DATA_BIT_WIDTH-1 : 0 ] row_data_in,
     input  logic [ DIM_SIZE-1 : 0 ] [ DATA_BIT_WIDTH-1 : 0 ] col_data_in,
