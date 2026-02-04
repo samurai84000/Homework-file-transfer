@@ -1,0 +1,130 @@
+`timescale 1ns/1ns
+
+module matmul_tb();
+
+    localparam DATA_WIDTH = 32;
+    localparam MAT_DIM_WIDTH = 3; /* 8x8 */
+    localparam MAT_DIM_SIZE = 2 ** MAT_DIM_WIDTH; [cite: 35, 36]
+    localparam ADDR_WIDTH = MAT_DIM_WIDTH * 2;
+    localparam MAT_SIZE = 2 ** ADDR_WIDTH; [cite: 36]
+
+    localparam X_PATH = "../x.txt";
+    localparam Y_PATH = "../y.txt";
+    localparam Z_PATH = "../z.txt"; [cite: 37, 38]
+
+    localparam PERIOD = 10;
+
+    logic clk = 'b1;
+    logic rst = 'b0;
+    logic start = 'b0;
+    logic calculation_done; [cite: 38]
+
+    logic [ MAT_DIM_SIZE-1 : 0 ] mat_x_we = 'b0;
+    logic [ MAT_DIM_SIZE-1 : 0 ] mat_y_we = 'b0; [cite: 39]
+    logic [ DATA_WIDTH-1 : 0 ]   mat_x_w_data = 'b0;
+    logic [ DATA_WIDTH-1 : 0 ]   mat_y_w_data = 'b0; [cite: 40]
+    
+    logic [ MAT_DIM_WIDTH-1 : 0 ] mat_x_w_addr = 'b0;
+    logic [ MAT_DIM_WIDTH-1 : 0 ] mat_y_w_addr = 'b0; [cite: 41]
+
+    logic [ ADDR_WIDTH-1 : 0 ] res_r_addr = 'b0;
+    logic [ DATA_WIDTH-1 : 0 ] res_r_data; [cite: 42]
+
+    // Instantiate updated matmul_top with renamed ports
+    matmul_top #(
+        .DATA_WIDTH ( DATA_WIDTH ),
+        .MAT_DIM_WIDTH ( MAT_DIM_WIDTH ),
+        .MAT_DIM_SIZE ( MAT_DIM_SIZE ),
+        .ADDR_WIDTH ( ADDR_WIDTH ), 
+        .MAT_SIZE ( MAT_SIZE ) 
+    ) mm_top_inst (
+        .clk ( clk ),
+        .rst ( rst ),
+        .start ( start ),
+        .mat_x_we( mat_x_we ),
+        .mat_y_we( mat_y_we ),
+        .mat_x_w_data ( mat_x_w_data ),
+        .mat_y_w_data ( mat_y_w_data ),
+        .mat_x_w_addr ( mat_x_w_addr ),
+        .mat_y_w_addr ( mat_y_w_addr ),
+        .res_r_addr( res_r_addr ),
+        .res_r_data( res_r_data ),
+        .calculation_done( calculation_done )
+    ); [cite: 43]
+
+    // Clock Generation
+    always begin
+        #(PERIOD/2);
+        clk = ~clk;
+    end [cite: 44]
+
+    logic [ DATA_WIDTH-1 : 0 ] x_buf [ MAT_SIZE-1 : 0 ];
+    logic [ DATA_WIDTH-1 : 0 ] y_buf [ MAT_SIZE-1 : 0 ];
+    logic [ DATA_WIDTH-1 : 0 ] z_buf [ MAT_SIZE-1 : 0 ];
+    logic [63:0] starttime = 0; [cite: 44, 45]
+
+    initial begin
+        // Initialize memory buffers
+        $readmemh( X_PATH, x_buf );
+        $readmemh( Y_PATH, y_buf );
+        $readmemh( Z_PATH, z_buf ); [cite: 45]
+
+        /* Load X and Y matrices into BRAMs */
+        #PERIOD;
+        for ( int i=0; i<MAT_DIM_SIZE; ++i ) begin
+            for ( int j=0; j<MAT_DIM_SIZE; ++j ) begin
+                @ ( negedge clk );
+                mat_x_w_data = x_buf[ i * MAT_DIM_SIZE + j ];
+                mat_y_w_data = y_buf[ i * MAT_DIM_SIZE + j ];
+                mat_x_w_addr = i;
+                mat_y_w_addr = j;
+                mat_x_we[j] = 'b1;
+                mat_y_we[i] = 'b1;
+                @ ( negedge clk );
+                mat_x_we = 'b0;
+                mat_y_we = 'b0;
+            end
+        end [cite: 46, 47, 49, 50]
+
+        $display( "@ %0d\tMatrix Load Complete", $time );
+        starttime = $time; [cite: 50, 51]
+
+        /* Start Matrix Multiplication */
+        #PERIOD;
+        @ ( negedge clk );
+        rst = 'b1;
+        @ ( negedge clk );
+        rst = 'b0;
+        start = 'b1;
+        @ ( negedge clk );
+        start = 'b0; [cite: 51, 52]
+
+        // Wait for pipelined execution to finish
+        wait ( calculation_done );
+        $display(
+            "@ %0d\tMatmul complete, took ~%0d cycles", 
+            $time,
+            ($time - starttime) / (PERIOD)
+        ); [cite: 52, 53]
+
+        /* Verify Results in Result Matrix (Z) */
+        #PERIOD;
+        for ( int i=0; i<MAT_DIM_SIZE; ++i ) begin
+            for ( int j=0; j<MAT_DIM_SIZE; ++j ) begin
+                @ ( negedge clk );
+                res_r_addr = i * MAT_DIM_SIZE + j;
+                
+                // Adjust for BRAM read latency (dout appears 1 cycle after addr)
+                #PERIOD; 
+                @ ( negedge clk );
+                $display( 
+                    "Z[%0d][%0d]: expected %0d, actual %0d", 
+                    i, j, z_buf[ res_r_addr ], res_r_data
+                );
+            end
+        end [cite: 54, 55, 56]
+
+        $stop;
+    end
+
+endmodule
