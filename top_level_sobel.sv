@@ -7,9 +7,8 @@ module top_level (
     input  logic [23:0] in_din,     // RGB Input
     output logic        in_full,
     
-    input  logic        out_rd_en,
-    output logic [7:0]  out_dout,    // Sobel Output
-    output logic        out_empty
+    output logic [7:0]  out_dout   // Sobel Output
+
 );
 
     // --- Intermediate Signals ---
@@ -81,21 +80,9 @@ module top_level (
         .in_empty   (fifo2_empty),
         .pixel_in   (fifo2_to_sobel_data),
         .out_wr_en  (sobel_wr_en),
-        .out_full   (fifo3_full),
-        .sobel_pixel(sobel_to_fifo3_data)
+        .out_full   (out_empty),
+        .sobel_pixel(out_dout)
     );
 
-    // --- 5. Output FIFO (Final Processed Data) ---
-    fifo #(.FIFO_DATA_WIDTH(8), .FIFO_BUFFER_SIZE(1024)) output_fifo (
-        .reset   (rst),
-        .wr_clk  (clk),
-        .wr_en   (sobel_wr_en),
-        .din     (sobel_to_fifo3_data),
-        .full    (fifo3_full),
-        .rd_clk  (clk),
-        .rd_en   (out_rd_en),
-        .dout    (out_dout),
-        .empty   (out_empty)
-    );
 
 endmodule
