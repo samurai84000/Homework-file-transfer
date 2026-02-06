@@ -16,22 +16,22 @@ module top_level (
     
     // FIFO 1 (Input) to Grayscale
     logic [23:0] fifo1_to_gs_data;
-    logic        gs_rd_en; [cite: 50]
+    logic        gs_rd_en; 
     logic        fifo1_empty;
     
     // Grayscale to FIFO 2 (Intermediate)
-    logic [7:0]  gs_to_fifo2_data; [cite: 51]
-    logic        gs_wr_en; [cite: 52]
+    logic [7:0]  gs_to_fifo2_data; 
+    logic        gs_wr_en; 
     logic        fifo2_full;
     
     // FIFO 2 (Intermediate) to Sobel
-    logic [7:0]  fifo2_to_sobel_data; [cite: 53]
-    logic        sobel_rd_en; [cite: 54]
+    logic [7:0]  fifo2_to_sobel_data; 
+    logic        sobel_rd_en; 
     logic        fifo2_empty;
     
     // Sobel to FIFO 3 (Output)
-    logic [7:0]  sobel_to_fifo3_data; [cite: 55]
-    logic        sobel_wr_en; [cite: 56]
+    logic [7:0]  sobel_to_fifo3_data; 
+    logic        sobel_wr_en; 
     logic        fifo3_full;
 
     // --- 1. Input FIFO (RGB Data) ---
@@ -43,9 +43,9 @@ module top_level (
         .full    (in_full),
         .rd_clk  (clk),
         .rd_en   (gs_rd_en),
-        .dout    (fifo1_to_gs_data), [cite: 58]
+        .dout    (fifo1_to_gs_data), 
         .empty   (fifo1_empty)
-    ); [cite: 57]
+    ); 
 
     // --- 2. Grayscale Module ---
     grayscale gs_inst (
@@ -57,7 +57,7 @@ module top_level (
         .out_wr_en (gs_wr_en),
         .out_full  (fifo2_full),
         .out_din   (gs_to_fifo2_data)
-    ); [cite: 59, 60]
+    ); 
 
     // --- 3. Intermediate FIFO (Grayscale Data) ---
     fifo #(.FIFO_DATA_WIDTH(8), .FIFO_BUFFER_SIZE(1024)) inter_fifo (
@@ -66,7 +66,7 @@ module top_level (
         .wr_en   (gs_wr_en),
         .din     (gs_to_fifo2_data),
         .full    (fifo2_full),
-        .rd_clk  (clk), [cite: 61]
+        .rd_clk  (clk), 
         .rd_en   (sobel_rd_en),
         .dout    (fifo2_to_sobel_data),
         .empty   (fifo2_empty)
