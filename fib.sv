@@ -1,4 +1,7 @@
-module fibonacci (
+module fibonacci #(
+    parameter example_parameter = 5,
+    parameter data_width = 8
+)
     input  logic        clk,
     input  logic        reset,
     input  logic        start,
